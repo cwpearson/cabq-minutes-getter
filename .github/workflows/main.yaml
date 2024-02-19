@@ -1,0 +1,28 @@
+name: Push Directory to Different Branch
+
+on:
+  workflow_dispatch: # Allows the workflow to be triggered manually from GitHub UI
+
+jobs:
+  push-to-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # Fetch all history for all tags and branches
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+
+      - name: Copy Files to Target Branch
+        run: |
+          git fetch
+          git checkout target-branch || git checkout -b target-branch
+          git rm -r '*' # Remove all files; adapt this as needed for your use case
+          cp -r path/to/your-directory/* .
+          git add .
+          git commit -m "Pushing directory to target-branch" || echo "No changes to commit"
+          git push origin target-branch
