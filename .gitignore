@@ -1,2 +1,4 @@
 .cache
 minutes
+.venv
+.python-version 

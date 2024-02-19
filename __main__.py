@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import datetime
 import hashlib
 from urllib.parse import urljoin
+import sys
+import time
+import os
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,7 +13,7 @@ from bs4 import BeautifulSoup
 RSS_URL = "https://cabq.legistar.com/Feed.ashx?M=Calendar&ID=24036010&GUID=935b0b27-867f-426d-a887-d4b5f45b4036&Mode=All&Title=City+of+Albuquerque+-+Calendar+(All)"
 
 CACHE_DIR = Path(".cache")
-MINUTES_DIR = Path("minutes")
+CABQ_MINUTES_DIR = Path(os.environ["CABQ_MINUTES_DIR"])
 
 
 def cached_fetch(url, prefix) -> bytes:
@@ -28,14 +31,6 @@ def cached_fetch(url, prefix) -> bytes:
             return response.content
         else:
             raise RuntimeError("couldn't retrieve url")
-
-
-def fetch(url) -> bytes:
-    response = requests.get(url)
-    if response.status_code == 200:
-        return response.content
-    else:
-        raise RuntimeError("couldn't retrieve url")
 
 
 def minutes_status(html: str) -> str:
@@ -65,7 +60,7 @@ def minutes_link(html: str) -> str:
 
     # Find the <span> tag that contains "Published minutes:"
     span_tag = soup.find(
-        "span", text=lambda text: text and "Published minutes:" in text
+        "span", string=lambda text: text and "Published minutes:" in text
     )
     if span_tag:
         # Navigate to the <a> tag from the found <span>
@@ -93,32 +88,54 @@ def minutes_link(html: str) -> str:
 
 def process(title: str, url: str, date_str: str):
     date = datetime_obj = datetime.strptime(date_str, "%a, %d %b %Y %H:%M:%S GMT")
-    content = cached_fetch(url, "url")
-    status = minutes_status(content)
-    print(f"{date} - {status}")
-    if status and "final" in status:
-        pdf_rel = minutes_link(content)
-        if pdf_rel is not None:
-            pdf_url = urljoin(url, pdf_rel)
-            print(f"{pdf_url}")
-            pdf_content = cached_fetch(pdf_url, "pdf")
-            output_name = datetime_obj.strftime("%Y_%m_%d_%H_%M_%S")
-            output_path = MINUTES_DIR / (output_name + ".pdf")
-            with open(output_path, "wb") as f:
-                f.write(pdf_content)
+    output_name = datetime_obj.strftime("%Y_%m_%d_%H_%M_%S")
+    output_path = CABQ_MINUTES_DIR / (output_name + ".pdf")
+
+    if output_path.is_file():
+        print(f"Skipping {output_name} (already exists)", file=sys.stderr)
+    else:
+        content = cached_fetch(url, "url")
+        status = minutes_status(content)
+        print(f"{date} - {status}", file=sys.stderr)
+        if status and "final" in status:
+            pdf_rel = minutes_link(content)
+            if pdf_rel is not None:
+                pdf_url = urljoin(url, pdf_rel)
+                print(f"{pdf_url}")
+                pdf_content = cached_fetch(pdf_url, "pdf")
+
+                with open(output_path, "wb") as f:
+                    f.write(pdf_content)
+                    return True
+
+    return False
 
 
 if __name__ == "__main__":
+
+    # interpret the first argument as how many pdfs to retrieve
+    num_left = int(sys.argv[1])
+
     content = cached_fetch(RSS_URL, "url")
     # Parse the XML content of the feed
     root = ET.fromstring(content)
 
     # Navigate through the structure to find items
     for item in root.findall(".//item"):
+        if num_left == 0:
+            break
         title = item.find("title").text
         link = item.find("link").text
         pubDate = item.find("pubDate").text
 
         # Print the title, link, and publication date of each item
-        # print(f"Title: {title}\nLink: {link}\nPublication Date: {pubDate}\n")
-        process(title, link, pubDate)
+        print(
+            f"Processing title={title} link={link} pudDate={pubDate}\n",
+            file=sys.stderr,
+        )
+        if process(title, link, pubDate):
+            num_left -= 1
+            print(f"Retrieval successful", file=sys.stderr)
+            if num_left:
+                print(f"num_left={num_left}. sleep(60)...", file=sys.stderr)
+                time.sleep(60)  # don't hit the server too hard

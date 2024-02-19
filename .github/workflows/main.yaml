@@ -1,10 +1,16 @@
-name: Push Directory to Different Branch
+name: Retrieve new CABQ Minutes PDFs
 
 on:
   workflow_dispatch: # Allows the workflow to be triggered manually from GitHub UI
+  schedule:
+    - cron: "0 0 * * *" # every day
+
+env:
+  CABQ_MINUTES_DIR: minutes
+  CABQ_MINUTES_KEY: ${{ secrets.CABQ_MINUTES_KEY }}
 
 jobs:
-  push-to-branch:
+  pull-run-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -12,17 +18,20 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history for all tags and branches
 
-      - name: Configure Git
-        run: |
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
+      - name: Python Prereqs
+        run: pip install -r requirements.txt
 
-      - name: Copy Files to Target Branch
+      - name: Clone cabq-minutes
         run: |
-          git fetch
-          git checkout target-branch || git checkout -b target-branch
-          git rm -r '*' # Remove all files; adapt this as needed for your use case
-          cp -r path/to/your-directory/* .
-          git add .
-          git commit -m "Pushing directory to target-branch" || echo "No changes to commit"
-          git push origin target-branch
+          bash scripts/pull-minutes.sh
+
+      - name: Fetch Minutes
+        run: |
+          python __main__.py 10 # retrieve only 10 in this job
+
+      - name: Push cabq-minutes
+        run: |
+          bash scripts/push-minutes.sh
+
+
+          
