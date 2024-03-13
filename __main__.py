@@ -104,9 +104,10 @@ def process(title: str, url: str, date_str: str):
                 print(f"{pdf_url}")
                 pdf_content = cached_fetch(pdf_url, "pdf")
 
+                print(f"write {output_path}", file=sys.stderr)
                 with open(output_path, "wb") as f:
                     f.write(pdf_content)
-                    return True
+                return True
 
     return False
 
@@ -137,5 +138,5 @@ if __name__ == "__main__":
             num_left -= 1
             print(f"Retrieval successful", file=sys.stderr)
             if num_left:
-                print(f"num_left={num_left}. sleep(60)...", file=sys.stderr)
-                time.sleep(60)  # don't hit the server too hard
+                print(f"num_left={num_left}. sleep(30)...", file=sys.stderr)
+                time.sleep(30)  # don't hit the server too hard
